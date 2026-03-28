@@ -17,6 +17,6 @@ The Algorithm was ignoring Large Shadows and would mark it as safe even though t
 
 ## Sample Results
 
-![Sample Output 1](./Output1.png)
-![Sample Output 2](./Output2.png)
-![Sample Output 3](./Output3.png)
+![Sample Output 1](./Output/Output1.png)
+![Sample Output 2](./Output/Output2.png)
+![Sample Output 3](./Output/Output3.png)
