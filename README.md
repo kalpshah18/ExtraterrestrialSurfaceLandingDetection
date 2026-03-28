@@ -6,7 +6,7 @@ This Program tries to mark each pixel with a safety score to detect Cliffs, Shad
 - Contouring for Large Shadows
 
 ## Gradient Scoring
-We calculate the Sobel Gradients of each Pixel using a Kernel Size of 3 and Blurring Kernel Size of 5.
+We calculate the Sobel Gradients of each Pixel using a Kernel Size of 3 and Blurring Kernel Size of 5. Found algorithm from [1].
 
 $$ g(x, y) = \sqrt{I_x^2 + I_y^2} $$
 
@@ -20,3 +20,6 @@ The Algorithm was ignoring Large Shadows and would mark it as safe even though t
 ![Sample Output 1](./Output/Output1.png)
 ![Sample Output 2](./Output/Output2.png)
 ![Sample Output 3](./Output/Output3.png)
+
+## Citation
+[1] J. He, H. Cui, and J. Feng, “Edge information based crater detection and matching for lunar exploration,” in Proc. International Conference on Intelligent Control and Information Processing, Dalian, China, Aug. 13–15, 2010, pp. 302–307
