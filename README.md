@@ -1,5 +1,7 @@
-# Detecting Unsafe Surfaces on Extraterrestrial Surfaces using Computer Vision
+# Detecting Unsafe Surfaces on Mars  Surfaces using Computer Vision
+We are attempting to determine unsafe surfaces for the Mars Rover to land on using computationally efficient methods in Computer Vision.
 
+# Part 1: Finding Unsafe Surfaces by Slopes
 This Program tries to mark each pixel with a safety score to detect Cliffs, Shadows, Craters, etc. which are unsafe to land on for a Space Rover. We do this using a 2 Step Process:
 
 - Gradient Scoring
@@ -23,3 +25,13 @@ The Algorithm was ignoring Large Shadows and would mark it as safe even though t
 
 ## Citation
 [1] J. He, H. Cui, and J. Feng, “Edge information based crater detection and matching for lunar exploration,” in Proc. International Conference on Intelligent Control and Information Processing, Dalian, China, Aug. 13–15, 2010, pp. 302–307
+
+# Part 2: Estimating Surface Hardness
+We found Cliffs, Craters, etc. previously but we do not know whether the land given is hard or soft. We use Fast-Fourier Transform to estimate if a surface is soft or hard.
+
+Hard surfaces, such as exposed bedrock or boulder fields, introduce "high-frequency noise." These sharp edges create spikes in the high-frequency spectrum. A smooth, soft surface like a dust mantle or a sand dune has very few sharp changes in brightness. Mathematically, this means the "signal" of the image is dominated by low spatial frequencies. Hard surfaces, such as exposed bedrock or boulder fields, introduce "high-frequency noise." Building upon this theory, I have manually set a tunable ratio threshold of 1 for a surface to be hard.
+
+## Sample Results
+![Sample Outputs Stacked](./TerrainClassification/prediction_output_stacked.png)
+
+We can see that the process works generally on both one-type hardness/softness dominated surface or a uniform mixture of both.
