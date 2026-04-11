@@ -51,12 +51,12 @@ def classify_surface_fft(image, block_size=32, threshold_radius=6):
     # 3. Determine threshold
     # Using the median ratio to dynamically split this specific image's features.
     all_ratios = [r['ratio'] for r in ratios]
-    threshold_ratio = np.median(all_ratios) 
-    print(f"Calculated dynamic threshold ratio: {threshold_ratio:.4f}")
+    THRESHOLD_RATIO = 1 # You can adjust this based on experimentation
+    print(f"Using static threshold ratio: {THRESHOLD_RATIO:.4f}")
     
     # 4. Populate the final prediction matrix
     for r in ratios:
-        is_hard = 1 if r['ratio'] > threshold_ratio else 0
+        is_hard = 1 if r['ratio'] > THRESHOLD_RATIO else 0
         i, j = r['i'], r['j']
         
         # Broadcast the prediction to all pixels inside that block
@@ -66,59 +66,88 @@ def classify_surface_fft(image, block_size=32, threshold_radius=6):
     return prediction_matrix, ratio_matrix
 
 def main():
-    image_path = 'testImage.jpg'
+    image_files = ['testImage1.jpg', 'testImage2.jpg', 'testImage3.jpg']
+    block_size = 32
+    threshold_radius = 6
     
-    # Check if image exists
-    if not os.path.exists(image_path):
-        print(f"Error: Could not find '{image_path}' in the current directory.")
-        sys.exit(1)
+    # Store results for all images
+    results = []
+    
+    # Process each image
+    for image_path in image_files:
+        # Check if image exists
+        if not os.path.exists(image_path):
+            print(f"Error: Could not find '{image_path}' in the current directory.")
+            continue
+            
+        # Load image in grayscale
+        # FFT texture analysis relies on intensity, not color
+        img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
         
-    # Load image in grayscale
-    # FFT texture analysis relies on intensity, not color
-    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            print(f"Error: Failed to load '{image_path}'. Ensure it is a valid image file.")
+            continue
+
+        print(f"\nProcessing {image_path}...")
+        # Run the classification
+        prediction_matrix, ratio_matrix = classify_surface_fft(img, block_size=block_size, threshold_radius=threshold_radius)
+        
+        results.append({
+            'filename': image_path,
+            'image': img,
+            'prediction': prediction_matrix,
+            'ratio': ratio_matrix
+        })
     
-    if img is None:
-        print(f"Error: Failed to load '{image_path}'. Ensure it is a valid image file.")
+    if not results:
+        print("Error: No images were processed successfully.")
         sys.exit(1)
 
-    # Run the classification
-    # You can tweak block_size (e.g., 16, 32, 64) and threshold_radius (e.g., 4, 6, 10)
-    prediction_matrix, ratio_matrix = classify_surface_fft(img, block_size=32, threshold_radius=6)
+    # --- Visualization: Stack all predictions in a single file ---
+    print("\nGenerating stacked visualizations...")
+    num_images = len(results)
+    fig, axs = plt.subplots(num_images, 4, figsize=(24, 6 * num_images))
     
-    # --- Visualization ---
-    print("Generating visualizations...")
-    fig, axs = plt.subplots(1, 4, figsize=(24, 6))
+    # If only one image, axs will be 1D; make it 2D for consistency
+    if num_images == 1:
+        axs = axs.reshape(1, -1)
     
-    # 1. Original Image
-    axs[0].imshow(img, cmap='gray')
-    axs[0].set_title("Original Satellite View ('testImage.jpg')")
-    axs[0].axis('off')
+    for idx, result in enumerate(results):
+        img = result['image']
+        prediction_matrix = result['prediction']
+        ratio_matrix = result['ratio']
+        filename = result['filename']
+        
+        # 1. Original Image
+        axs[idx, 0].imshow(img, cmap='gray')
+        axs[idx, 0].set_title(f"Original: {filename}")
+        axs[idx, 0].axis('off')
 
-    # 2. Prediction Matrix
-    # Using 'coolwarm' colormap: Blue represents 0 (Soft), Red represents 1 (Hard)
-    axs[1].imshow(prediction_matrix, cmap='coolwarm')
-    axs[1].set_title("Prediction Matrix\n(Blue: Soft Sand/Dust | Red: Hard Rock)")
-    axs[1].axis('off')
+        # 2. Prediction Matrix
+        # Using 'coolwarm' colormap: Blue represents 0 (Soft), Red represents 1 (Hard)
+        axs[idx, 1].imshow(prediction_matrix, cmap='coolwarm')
+        axs[idx, 1].set_title(f"Prediction: {filename}\n(Blue: Soft | Red: Hard)")
+        axs[idx, 1].axis('off')
 
-    # 3. Overlay
-    # Plot original grayscale first, then overlay the prediction matrix with transparency (alpha)
-    axs[2].imshow(img, cmap='gray')
-    axs[2].imshow(prediction_matrix, cmap='coolwarm', alpha=0.4) 
-    axs[2].set_title("Overlay\n(Predictions over Terrain)")
-    axs[2].axis('off')
+        # 3. Overlay
+        # Plot original grayscale first, then overlay the prediction matrix with transparency (alpha)
+        axs[idx, 2].imshow(img, cmap='gray')
+        axs[idx, 2].imshow(prediction_matrix, cmap='coolwarm', alpha=0.4) 
+        axs[idx, 2].set_title(f"Overlay: {filename}")
+        axs[idx, 2].axis('off')
 
-    # 4. FFT Ratio Heatmap
-    ratio_plot = axs[3].imshow(ratio_matrix, cmap='inferno')
-    axs[3].set_title("FFT Ratio Heatmap\n(High / Low Frequency Energy)")
-    axs[3].axis('off')
-    fig.colorbar(ratio_plot, ax=axs[3], fraction=0.046, pad=0.04)
+        # 4. FFT Ratio Heatmap
+        ratio_plot = axs[idx, 3].imshow(ratio_matrix, cmap='inferno')
+        axs[idx, 3].set_title(f"FFT Ratio: {filename}")
+        axs[idx, 3].axis('off')
+        fig.colorbar(ratio_plot, ax=axs[idx, 3], fraction=0.046, pad=0.04)
 
     plt.tight_layout()
     
     # Save the output figure
-    output_filename = 'prediction_output.png'
+    output_filename = 'prediction_output_stacked.png'
     plt.savefig(output_filename, dpi=300)
-    print(f"Successfully saved visualization to '{output_filename}'")
+    print(f"Successfully saved stacked visualization to '{output_filename}'")
     
     # Display the plot window
     plt.show()
