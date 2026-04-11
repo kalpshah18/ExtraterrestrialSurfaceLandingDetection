@@ -8,13 +8,24 @@ import sys
 def classify_surface_fft(image, block_size=32, threshold_radius=6):
     """
     Classifies a grayscale image into soft (0) and hard (1) surfaces using FFT.
+    Includes reflection padding to process boundary edge pixels without skewing frequencies.
     """
-    h, w = image.shape
+    orig_h, orig_w = image.shape
+    
+    # 1. Calculate how much padding is needed to make dimensions multiples of block_size
+    pad_h = (block_size - (orig_h % block_size)) % block_size
+    pad_w = (block_size - (orig_w % block_size)) % block_size
+    
+    # 2. Pad the image using 'reflect' to avoid sharp edges that skew the FFT
+    padded_image = np.pad(image, ((0, pad_h), (0, pad_w)), mode='reflect')
+    h, w = padded_image.shape
+    
+    # Matrices are now sized to the padded dimensions
     prediction_matrix = np.zeros((h, w))
     ratio_matrix = np.zeros((h, w), dtype=float)
-    stride = block_size # Non-overlapping for efficiency
+    stride = block_size 
     
-    # 1. Create spatial masks for Low vs High frequency
+    # 3. Create spatial masks for Low vs High frequency
     cy, cx = block_size // 2, block_size // 2
     y, x = np.ogrid[:block_size, :block_size]
     dist_from_center = np.sqrt((x - cx)**2 + (y - cy)**2)
@@ -24,16 +35,12 @@ def classify_surface_fft(image, block_size=32, threshold_radius=6):
     
     ratios = []
     
-    print(f"Processing image of size {w}x{h} in {block_size}x{block_size} blocks...")
+    print(f"Original size: {orig_w}x{orig_h}. Padded to: {w}x{h} for processing...")
     
-    # 2. Process the image in blocks
+    # 4. Process the image in blocks (No need to check for incomplete blocks anymore!)
     for i in range(0, h, stride):
         for j in range(0, w, stride):
-            block = image[i:i+block_size, j:j+block_size]
-            
-            # Skip incomplete blocks at the edges
-            if block.shape[0] != block_size or block.shape[1] != block_size:
-                continue
+            block = padded_image[i:i+block_size, j:j+block_size]
             
             # Compute 2D Fast Fourier Transform
             f_transform = fft2(block)
@@ -48,13 +55,11 @@ def classify_surface_fft(image, block_size=32, threshold_radius=6):
             ratio = high_energy / (low_energy + 1e-8)
             ratios.append({'i': i, 'j': j, 'ratio': ratio})
 
-    # 3. Determine threshold
-    # Using the median ratio to dynamically split this specific image's features.
-    all_ratios = [r['ratio'] for r in ratios]
+    # 5. Determine threshold
     THRESHOLD_RATIO = 1 # You can adjust this based on experimentation
     print(f"Using static threshold ratio: {THRESHOLD_RATIO:.4f}")
     
-    # 4. Populate the final prediction matrix
+    # 6. Populate the final prediction matrix
     for r in ratios:
         is_hard = 1 if r['ratio'] > THRESHOLD_RATIO else 0
         i, j = r['i'], r['j']
@@ -63,7 +68,11 @@ def classify_surface_fft(image, block_size=32, threshold_radius=6):
         prediction_matrix[i:i+block_size, j:j+block_size] = is_hard
         ratio_matrix[i:i+block_size, j:j+block_size] = r['ratio']
         
-    return prediction_matrix, ratio_matrix
+    # 7. Crop the matrices back to the original image dimensions before returning
+    final_prediction = prediction_matrix[:orig_h, :orig_w]
+    final_ratio = ratio_matrix[:orig_h, :orig_w]
+    
+    return final_prediction, final_ratio
 
 def main():
     image_files = ['testImage1.jpg', 'testImage2.jpg', 'testImage3.jpg']
@@ -125,14 +134,15 @@ def main():
 
         # 2. Prediction Matrix
         # Using 'coolwarm' colormap: Blue represents 0 (Soft), Red represents 1 (Hard)
-        axs[idx, 1].imshow(prediction_matrix, cmap='coolwarm')
+        # Keep binary class colors stable even when all pixels are the same class.
+        axs[idx, 1].imshow(prediction_matrix, cmap='coolwarm', vmin=0, vmax=1)
         axs[idx, 1].set_title(f"Prediction: {filename}\n(Blue: Soft | Red: Hard)")
         axs[idx, 1].axis('off')
 
         # 3. Overlay
         # Plot original grayscale first, then overlay the prediction matrix with transparency (alpha)
         axs[idx, 2].imshow(img, cmap='gray')
-        axs[idx, 2].imshow(prediction_matrix, cmap='coolwarm', alpha=0.4) 
+        axs[idx, 2].imshow(prediction_matrix, cmap='coolwarm', alpha=0.4, vmin=0, vmax=1) 
         axs[idx, 2].set_title(f"Overlay: {filename}")
         axs[idx, 2].axis('off')
 
