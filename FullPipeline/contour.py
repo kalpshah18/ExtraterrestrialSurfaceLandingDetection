@@ -25,7 +25,9 @@ def contour(
     else:
         img_gray = img_gray.copy()
  
-    img_gray = img_gray.astype(np.float32)
+    if img_gray.dtype != np.uint8:
+        img_gray = np.clip(img_gray, 0, 255).astype(np.uint8)
+
     COLOR_THRESHOLD = 40 # Adjust this threshold based on your images to detect shadows effectively
     _, binary_mask = cv2.threshold(img_gray, COLOR_THRESHOLD, 255, cv2.THRESH_BINARY_INV)
     contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
