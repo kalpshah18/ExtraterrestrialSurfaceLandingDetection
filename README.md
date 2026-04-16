@@ -1,4 +1,8 @@
 # Detecting Safe and Unsafe Mars Landing Surfaces
+Kalp Pragneshkumar Shah EE299 Project Course
+
+Project Advisor: Prof. Shanmuganathan Raman
+
 
 This project estimates rover landing safety from orbital/surface imagery using lightweight computer vision methods.
 
