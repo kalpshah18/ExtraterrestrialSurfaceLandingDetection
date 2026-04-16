@@ -105,6 +105,52 @@ def find_large_safe_areas(
     return large_safe_mask
 
 
+def find_largest_safe_bounding_box(
+    prediction_map: np.ndarray,
+    safe_value: int = 0,
+) -> tuple[int, int, int, int, int] | None:
+    """Find the largest axis-aligned rectangle containing only safe pixels.
+
+    Returns
+    -------
+    tuple[int, int, int, int, int] | None
+        Bounding box as (x, y, width, height, area) or ``None`` if no safe
+        pixel exists.
+    """
+    if prediction_map.ndim != 2:
+        raise ValueError("prediction_map must be a 2D array")
+
+    safe_binary = (prediction_map == safe_value).astype(np.uint8)
+    rows, cols = safe_binary.shape
+    heights = np.zeros(cols, dtype=np.int32)
+
+    best: tuple[int, int, int, int, int] | None = None
+    best_area = 0
+
+    for row in range(rows):
+        heights = np.where(safe_binary[row] == 1, heights + 1, 0)
+
+        stack: list[int] = []
+        for i in range(cols + 1):
+            curr_height = heights[i] if i < cols else 0
+
+            while stack and curr_height < heights[stack[-1]]:
+                h = int(heights[stack.pop()])
+                left = stack[-1] + 1 if stack else 0
+                width = i - left
+                area = h * width
+
+                if area > best_area and h > 0 and width > 0:
+                    x = left
+                    y = row - h + 1
+                    best = (x, y, width, h, area)
+                    best_area = area
+
+            stack.append(i)
+
+    return best
+
+
 def process_image(
     image_path: Path,
     safe_threshold: float,
@@ -132,6 +178,7 @@ def process_image(
         min_area=large_safe_min_area,
         safe_value=0,
     )
+    largest_safe_bbox = find_largest_safe_bounding_box(prediction_map, safe_value=0)
 
     return {
         "name": image_path.name,
@@ -140,6 +187,7 @@ def process_image(
         "safe_mask": safe_mask,
         "safe_score": safe_score,
         "large_safe_areas": large_safe_areas,
+        "largest_safe_bbox": largest_safe_bbox,
     }
 
 
@@ -217,9 +265,28 @@ def main() -> int:
         image_stem = Path(result["name"]).stem
         output_path = output_dir / f"{index + 1}_{image_stem}_large_safe_areas.png"
 
+        bbox = result["largest_safe_bbox"]
+        original_with_box = result["original"].copy()
+        if bbox is not None:
+            x, y, w, h, _ = bbox
+            cv2.rectangle(
+                original_with_box,
+                (x, y),
+                (x + w - 1, y + h - 1),
+                (255, 255, 0),
+                2,
+            )
+
         save_fig, save_axes = plt.subplots(1, 2, figsize=(10, 4), constrained_layout=True)
-        save_axes[0].imshow(result["original"])
-        save_axes[0].set_title(f"Original: {result['name']}")
+        save_axes[0].imshow(original_with_box)
+        if bbox is None:
+            save_axes[0].set_title(f"Original: {result['name']}")
+        else:
+            x, y, w, h, area = bbox
+            save_axes[0].set_title(
+                f"Original + landing box\n"
+                f"x={x}, y={y}, w={w}, h={h}, area={area}"
+            )
         save_axes[0].axis("off")
 
         save_axes[1].imshow(result["large_safe_areas"], cmap="Greens", vmin=0, vmax=1)
@@ -227,6 +294,17 @@ def main() -> int:
             f"Large safe areas (min area={args.large_safe_min_area})\n"
             "Black: filtered out | Green: large safe area"
         )
+        if bbox is not None:
+            x, y, w, h, _ = bbox
+            safe_box_patch = plt.Rectangle(
+                (x, y),
+                w,
+                h,
+                fill=False,
+                edgecolor="yellow",
+                linewidth=2,
+            )
+            save_axes[1].add_patch(safe_box_patch)
         save_axes[1].axis("off")
 
         save_fig.savefig(output_path, dpi=200)
@@ -241,8 +319,27 @@ def main() -> int:
         axes = np.expand_dims(axes, axis=0)
 
     for row_index, result in enumerate(results):
-        axes[row_index, 0].imshow(result["original"])
-        axes[row_index, 0].set_title(f"Original: {result['name']}")
+        bbox = result["largest_safe_bbox"]
+        original_with_box = result["original"].copy()
+        if bbox is not None:
+            x, y, w, h, _ = bbox
+            cv2.rectangle(
+                original_with_box,
+                (x, y),
+                (x + w - 1, y + h - 1),
+                (255, 255, 0),
+                2,
+            )
+
+        axes[row_index, 0].imshow(original_with_box)
+        if bbox is None:
+            axes[row_index, 0].set_title(f"Original: {result['name']}")
+        else:
+            x, y, w, h, area = bbox
+            axes[row_index, 0].set_title(
+                f"Original + landing box\n"
+                f"x={x}, y={y}, w={w}, h={h}, area={area}"
+            )
         axes[row_index, 0].axis("off")
 
         axes[row_index, 1].imshow(result["large_safe_areas"], cmap="Greens", vmin=0, vmax=1)
@@ -250,7 +347,29 @@ def main() -> int:
             f"Large safe areas (min area={args.large_safe_min_area})\n"
             "Black: filtered out | Green: large safe area"
         )
+        if bbox is not None:
+            x, y, w, h, _ = bbox
+            safe_box_patch = plt.Rectangle(
+                (x, y),
+                w,
+                h,
+                fill=False,
+                edgecolor="yellow",
+                linewidth=2,
+            )
+            axes[row_index, 1].add_patch(safe_box_patch)
         axes[row_index, 1].axis("off")
+
+    for result in results:
+        bbox = result["largest_safe_bbox"]
+        if bbox is None:
+            print(f"{result['name']}: no all-safe landing rectangle found.")
+        else:
+            x, y, w, h, area = bbox
+            print(
+                f"{result['name']}: largest all-safe landing box -> "
+                f"x={x}, y={y}, w={w}, h={h}, area={area}"
+            )
 
     plt.show()
     return 0
